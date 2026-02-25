@@ -1,11 +1,12 @@
+new
 simple_0_0:
 start pose  0       0       0
-end pose    130.0   -9.4    -33.0
+end pose   93.7   -18.5   -23.0
 
 simple_r_r
-start pose 60.7 -61 -25
-end pose 122.7 -10.5 106
+start pose 30.3    -30.3   -38.0
+end pose   107.4   -49.2   16.0
 
 simple_c_c
-start pose 0. 30.5 0
-end pose 15.7 39.6 82
+start pose 0       30.5    0 
+end pose   15.1    49.5   100.0
