@@ -11,7 +11,7 @@ bufferSize = 1024
 
 # Camera parameters
 camera_id = 1
-marker_length = 0.068 # 0.095 #
+marker_length = 0.095 #
 aruco_s = marker_length / 2
 aruco_obj_points = np.array([
     [-aruco_s,  aruco_s, 0],  # Top-left

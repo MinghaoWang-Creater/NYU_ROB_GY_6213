@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import socket
 from time import strftime
+from scipy.spatial.transform import Rotation as R
 
 # Local libraries
 import parameters
@@ -206,26 +207,30 @@ class CameraSensor:
         
         if not ret:
             return None, None
+        
+        return rvecs, tvecs
 
-        # 如果只有一解，直接返回
-        if len(rvecs) == 1:
-            best_rvec, best_tvec = rvecs[0], tvecs[0]
-        else:
-            # 2. 策略筛选：如果有两解，选择与上一帧“欧氏距离”最近的解
-            if self.last_rvec is not None:
-                # 比较两个解与上一帧的旋转和平移差异
-                diff0 = np.linalg.norm(rvecs[0] - self.last_rvec) + np.linalg.norm(tvecs[0] - self.last_tvec)
-                diff1 = np.linalg.norm(rvecs[1] - self.last_rvec) + np.linalg.norm(tvecs[1] - self.last_tvec)
-                
-                idx = 0 if diff0 < diff1 else 1
-                best_rvec, best_tvec = rvecs[idx], tvecs[idx]
-            else:
-                # 第一帧：选择 Z 轴（深度）更合理的，或者误差更小的
-                # 在桌面上，通常二维码是正对着相机的，我们可以选旋转角度较小的那个
-                best_rvec, best_tvec = rvecs[0], tvecs[0]
+        # # 如果只有一解，直接返回
+        # if len(rvecs) == 1:
+        #     best_rvec, best_tvec = rvecs[0], tvecs[0]
+        # else:
+        #     def get_tilt_score(rvec):
+        #         # rmat, _ = cv2.Rodrigues(rvec)
+        #         euler = R.from_rotvec(rvec.flatten()).as_euler('ZYX')
+        #         print("Euler", euler)
+        #         return np.sum(np.abs(euler[-2:]))
+            
+        #     s = [get_tilt_score(rvecs[i]) for i in range(2)]
+        #     print(s)
+        #     if s[0] < s[1]:
+        #         best_rvec, best_tvec = rvecs[0], tvecs[0]
+        #     else:
+        #         best_rvec, best_tvec = rvecs[1], tvecs[1]
 
-        self.last_rvec, self.last_tvec = best_rvec, best_tvec
-        return best_rvec, best_tvec
+
+
+        # self.last_rvec, self.last_tvec = best_rvec, best_tvec
+        # return best_rvec, best_tvec
     # Constructor
     def __init__(self, camera_id):
         self.camera_id = camera_id
@@ -244,6 +249,12 @@ class CameraSensor:
         self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
         self.parameters = aruco.DetectorParameters()
         self.detector = aruco.ArucoDetector(self.aruco_dict, self.parameters)
+
+        
+        self.t_cam_Wm = np.array([-0.09672431764972296, 0.6759073797311419, 1.985569405581368])
+        self.r_cam_Wm = np.array([0.06030869386511298, -2.652779206688187, 1.6107345099735122])
+        self.t_robot_marker = 0#np.array([6.7, -8.4, 12.9]) / 100
+        self.r_robot_marker = R.from_euler('zyx', np.array([90., 0., 0.0]), degrees=True).as_rotvec().tolist()
         
     # Get a new pose estimate from a camera image
     def get_signal(self, last_camera_signal):
@@ -259,23 +270,72 @@ class CameraSensor:
         ret, frame = self.cap.read()
         if not ret:
             return False, []
-        
+        def transformation_matrix(tvec, rvec):
+            # Standard OpenCV Rodrigues conversion
+            R, _ = cv2.Rodrigues(np.array(rvec, dtype=float))
+            T = np.eye(4)
+            T[:3, :3] = R
+            T[:3, 3] = np.array(tvec).flatten()
+            return T
+
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         print(gray.shape)
         corners, ids, rejectedImgPoints = self.detector.detectMarkers(gray)
         if ids is not None:
+            print("detected:", ids)
             # Estimate pose for each detected marker
             for i in range(len(ids)):
-                success, rvec, tvec = cv2.solvePnP(parameters.aruco_obj_points, 
+                # success, rvec, tvec = cv2.solvePnP(parameters.aruco_obj_points, 
+                #                         corners[i].reshape(4, 2), 
+                #                         parameters.camera_matrix, 
+                #                         parameters.dist_coeffs, 
+                #                         flags=cv2.SOLVEPNP_IPPE_SQUARE  # Optimized for flat, square markers
+                #                     )
+                # # rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corners[i], parameters.marker_length, parameters.camera_matrix, parameters.dist_coeffs)
+                # # pose_estimate = [tvec[0][0][0], tvec[0][0][1], tvec[0][0][2], rvec[0][0][0], rvec[0][0][1], rvec[0][0][2]]
+                rvecs, tvecs = self.get_stable_pose(parameters.aruco_obj_points, 
                                         corners[i].reshape(4, 2), 
                                         parameters.camera_matrix, 
-                                        parameters.dist_coeffs, 
-                                        flags=cv2.SOLVEPNP_IPPE_SQUARE  # Optimized for flat, square markers
-                                    )
-                # rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corners[i], parameters.marker_length, parameters.camera_matrix, parameters.dist_coeffs)
-                # pose_estimate = [tvec[0][0][0], tvec[0][0][1], tvec[0][0][2], rvec[0][0][0], rvec[0][0][1], rvec[0][0][2]]
-                pose_estimate = [tvec[0][0], tvec[1][0], tvec[2][0], rvec[0][0], rvec[1][0], rvec[2][0]]
-                print("distance", np.linalg.norm(tvec))
+                                        parameters.dist_coeffs)
+                t_robot_list = []
+                r_robot_list = []
+                verbose = False
+                np.set_printoptions(precision=3)
+                if verbose:
+                    print(T_cam_W)
+                    print(T_robot_marker)
+                for i, (rvec, tvec) in enumerate(zip(rvecs, tvecs)):
+                    # pose_estimate = [tvec[0][0], tvec[1][0], tvec[2][0], rvec[0][0], rvec[1][0], rvec[2][0]]
+                    # print(r_robot_marker)
+                    T_robot_marker = transformation_matrix(self.t_robot_marker, self.r_robot_marker)
+                    T_cam_W = transformation_matrix(self.t_cam_Wm, self.r_cam_Wm) @ np.linalg.inv(T_robot_marker)
+                    T_cam_marker = transformation_matrix(tvec, rvec)
+                    T_W_marker = np.linalg.inv(T_cam_W) @ T_cam_marker
+                    T_robot = T_W_marker @ np.linalg.inv(T_robot_marker)
+                    t_robot = T_robot[:3, 3]
+                    r_robot, _ = cv2.Rodrigues(T_robot[:3, :3])
+                    t_robot_list.append(t_robot)
+                    r_robot_list.append(r_robot)
+                    if verbose:
+                        print("------ Solve pnp res", i)
+                        print("t_robot", t_robot.flatten())
+                        print("r_robot", r_robot.flatten())
+                        print("distance", np.linalg.norm(t_robot))
+                # filter : select the one with smaller roll & pitch
+                if verbose:
+                    print("--------- filtering")
+                def get_tilt_score(i, rvec):
+                    euler = R.from_rotvec(rvec.flatten()).as_euler('ZYX', degrees=True)
+                    if verbose:
+                        print("id", i,"Euler", euler)
+                    return np.sum(np.abs(euler[-2:]))
+                best_id = np.argmin([get_tilt_score(i, r) for i, r in enumerate(r_robot_list)])
+                t_robot = t_robot_list[best_id]
+                r_robot = r_robot_list[best_id]
+                if verbose:
+                    print("best", best_id)
+                
+                pose_estimate = t_robot.flatten().tolist() + r_robot.flatten().tolist()
             return True, pose_estimate
         
         return False, []
