@@ -175,3 +175,4 @@ mse_rotation = np.mean(np.sum(rot_errors**2, axis=1))
 
 print("Mean Squared Error (Translation):", mse_translation)
 print("Mean Squared Error (Rotation):", mse_rotation)
+print("Optimal Transformation Matrix (Camera to World):\n", T_opt)

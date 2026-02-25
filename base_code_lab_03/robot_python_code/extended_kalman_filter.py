@@ -10,18 +10,40 @@ import data_handling
 
 from motion_models import MyMotionModel
 
+from scipy.spatial.transform import Rotation as R
+
+
+def estimate_pose_from_camera_measurement(camera_measurement):
+    T_optimal = np.array(
+        [
+            [0.99660771, 0.07871153, 0.02403284, 0.03141616],
+            [-0.07888354, 0.99686397, 0.00629397, 0.00124132],
+            [-0.02346206, -0.00816841, 0.99969136, 0.07092353],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+    )
+    cam_meas_homog = np.array(
+        [camera_measurement[0], camera_measurement[1], camera_measurement[2], 1],
+        dtype=np.float64,
+    )
+    rot = T_optimal[:3, :3] @ R.from_rotvec(camera_measurement[3:]).as_matrix()
+    theta = R.from_matrix(rot).as_euler("zyx", degrees=False)[0]
+    world_meas_homog = T_optimal @ cam_meas_homog
+    return np.array([world_meas_homog[0], world_meas_homog[1], theta], dtype=np.float64)
+
 
 # Main class
 class ExtendedKalmanFilter:
-    def __init__(self, x_0, Sigma_0, encoder_counts_0):
-        self.state_mean = x_0
+    def __init__(self, x_0, Sigma_0, encoder_counts_0, use_corrector=True):
+        self.state_mean = np.array(x_0)
         self.state_covariance = Sigma_0
-        self.predicted_state_mean = [0, 0, 0]
+        self.predicted_state_mean = np.array([0, 0, 0], dtype=np.float64)
         self.predicted_state_covariance = parameters.I3 * 1.0
         self.last_encoder_counts = encoder_counts_0
         self.model = MyMotionModel(x_0, encoder_counts_0)
         self.model.step_with_noise = False  # EKF prediction step should not have noise, since we account for noise in the R matrix
         self.model.return_noise_scale = True
+        self.use_corrector = use_corrector
 
     # Call the prediction and correction steps
     def update(self, u_t, z_t, delta_t):
@@ -35,16 +57,19 @@ class ExtendedKalmanFilter:
 
     # Set the EKF's predicted state mean and covariance matrix
     def prediction_step(self, u_t, delta_t):
-        self.model.state = self.state_mean # sync states
-        self.model.last_encoder_count = self.last_encoder_counts # sync encoder counts for distance calculation
+        self.model.state = self.state_mean  # sync states
+        self.model.last_encoder_count = (
+            self.last_encoder_counts
+        )  # sync encoder counts for distance calculation
         x_tp_mean, s = self.model.step_update(u_t[0], u_t[1], delta_t)
+        # print("noise scale:", s)  # Debug print for noise scale
         G_x = self.get_G_x(self.state_mean, s, delta_t)
         R_t = self.get_R(s)
         G_u = self.get_G_u(self.state_mean, delta_t)
         self.predicted_state_mean = x_tp_mean
-        self.predicted_state_covariance = np.matmul(
-            np.matmul(G_x, self.state_covariance), G_x.T
-        ) + np.matmul(np.matmul(G_u, R_t), G_u.T)
+        self.predicted_state_covariance = (
+            G_x @ self.state_covariance @ G_x.T + G_u @ R_t @ G_u.T
+        )
         self.last_encoder_counts = u_t[0]
         return
 
@@ -56,8 +81,19 @@ class ExtendedKalmanFilter:
         K_t = self.predicted_state_covariance @ H_t.T @ np.linalg.inv(S_t)
         diff = z_t - self.get_h_function(self.predicted_state_mean)
 
-        self.state_mean = self.predicted_state_mean + K_t @ diff
-        self.state_covariance = (parameters.I3 - K_t @ H_t) @ self.predicted_state_covariance
+        if self.use_corrector:
+            self.state_mean = self.predicted_state_mean + K_t @ diff
+            self.state_covariance = (
+                parameters.I3 - K_t @ H_t
+            ) @ self.predicted_state_covariance
+        else:
+            self.state_mean = np.array(
+                self.predicted_state_mean
+            )  # No correction, only prediction
+            self.state_covariance = np.array(
+                self.predicted_state_covariance
+            )  # No correction, only prediction
+        # print(self.state_covariance)
         return
 
     # The nonlinear transition equation that provides new states from past states
@@ -118,12 +154,12 @@ class KalmanFilterPlot:
         self.ax = ax
         self.fig = fig
 
-    def update(self, state_mean, state_covaraiance):
+    def update(self, state_mean, z_t, state_covaraiance, realtime=True):
         plt.clf()
 
         # Plot covariance ellipse
         lambda_, v = np.linalg.eig(state_covaraiance)
-        lambda_ = np.sqrt(lambda_)
+        lambda_ = np.sqrt(lambda_) * 10
         xy = (state_mean[0], state_mean[1])
         angle = np.rad2deg(np.arctan2(*v[:, 0][::-1]))
         ell = Ellipse(
@@ -144,43 +180,170 @@ class KalmanFilterPlot:
             [state_mean[1], state_mean[1] + self.dir_length * math.sin(state_mean[2])],
             "r",
         )
+        plt.plot(z_t[0], z_t[1], "bo")
+        plt.plot(
+            [z_t[0], z_t[0] + self.dir_length * math.cos(z_t[2])],
+            [z_t[1], z_t[1] + self.dir_length * math.sin(z_t[2])],
+            "b",
+        )
         plt.xlabel("X(m)")
         plt.ylabel("Y(m)")
-        plt.axis([-0.25, 2, -1, 1])
+        plt.axis([-0.25, 2, -2, 2])
         plt.grid()
-        plt.draw()
-        plt.pause(0.1)
+        if realtime:
+            plt.draw()
+            plt.pause(0.1)
+
+
+def plot_traj_single(state, camera, covariance, label, color="r"):
+    # mark the start by *, and by +
+    plt.plot(
+        state[0][0], state[0][1], f"{color}*", markersize=20, label=f"{label} Start"
+    )
+    plt.plot(
+        state[-1][0], state[-1][1], f"{color}+", markersize=20, label=f"{label} End"
+    )
+    plt.plot(state[:, 0], state[:, 1], f"{color}o-", label=f"{label} State")
+    if camera is not None:
+        plt.plot(
+            camera[:, 0], camera[:, 1], "ko-", label="Camera Measurement", alpha=0.3
+        )
+    # plot covariance ellipses at every 10th point
+    for i in range(0, len(state), 20):
+        lambda_, v = np.linalg.eig(covariance[i])
+        lambda_ = np.sqrt(lambda_) * 5
+        xy = (state[i][0], state[i][1])
+        angle = np.rad2deg(np.arctan2(*v[:, 0][::-1]))
+        ell = Ellipse(
+            xy,
+            alpha=0.3,
+            facecolor=color,
+            width=lambda_[0],
+            height=lambda_[1],
+            angle=angle,
+        )
+        ax = plt.gca()
+        ax.add_artist(ell)
+
+
+def plot_traj(state_raw, camera_raw, covariance_raw):
+    multiple_traj = isinstance(
+        state_raw[0], list
+    )  # Check if we have multiple trajectories
+    plt.cla()
+    if multiple_traj:
+        color = ["r", "g", "b", "c", "m", "y"]  # Colors for different trajectories
+        for i in range(len(state_raw)):
+            state = np.array(state_raw[i])
+            camera = np.array(camera_raw[i])
+            plot_traj_single(
+                state,
+                camera if i == len(state_raw) - 1 else None,
+                covariance_raw[i],
+                label=f"EKF {i + 1}",
+                color=color[i % len(color)],
+            )
+        plt.legend(loc="upper left", fontsize="8", ncol=4, framealpha=0.3)
+    else:
+        print("Single trajectory provided, plotting without labels.")
+        state = np.array(state_raw)
+        camera = np.array(camera_raw)
+        plot_traj_single(state, camera, covariance_raw, label="EKF Estimate")
+        plt.legend()
+
+    # plt.axis("equal")
+    plt.xlabel("X(m)")
+    plt.ylabel("Y(m)")
+    # plt.axis([-0.25, 2, -2, 2])
+    plt.grid()
+    plt.show()
+
+
+def run_test(x_0, ekf_data, use_corrector):
+    print("Initial EKF state guess:", x_0)  # Debug print for initial state guess
+    Sigma_0 = parameters.I3
+    encoder_counts_0 = ekf_data[0][2].encoder_counts
+    extended_kalman_filter = ExtendedKalmanFilter(
+        x_0, Sigma_0, encoder_counts_0, use_corrector
+    )
+    # Create plotting tool for ekf
+    kalman_filter_plot = KalmanFilterPlot()
+    state_traj = []
+    state_traj_camera = []
+    covariance = []
+    state_traj.append(extended_kalman_filter.state_mean)
+    state_traj_camera.append(estimate_pose_from_camera_measurement(ekf_data[0][3]))
+    # Loop over sim data
+    for t in range(1, len(ekf_data)):
+        row = ekf_data[t]
+        delta_t = ekf_data[t][0] - ekf_data[t - 1][0]  # time step size
+        u_t = np.array([row[2].encoder_counts, row[2].steering])  # robot_sensor_signal
+        # z_t = np.array([row[3][0], row[3][1], row[3][5]])  # camera_sensor_signal
+        z_t = estimate_pose_from_camera_measurement(row[3])
+        print(
+            f"Time step {t}, delta_t: {delta_t:.3f} sec, x: {extended_kalman_filter.state_mean}, z_t: {z_t}, u_t: {u_t}"
+        )  # Debug print
+        # Run the EKF for a time step
+        extended_kalman_filter.update(u_t, z_t, delta_t)
+        kalman_filter_plot.update(
+            extended_kalman_filter.state_mean,
+            z_t,
+            extended_kalman_filter.state_covariance[0:2, 0:2],
+            realtime=False,
+        )
+        covariance.append(extended_kalman_filter.state_covariance[0:2, 0:2])
+        state_traj.append(extended_kalman_filter.state_mean)
+        state_traj_camera.append(z_t)
+    return state_traj, state_traj_camera, covariance
 
 
 # Code to run your EKF offline with a data file.
 def offline_efk():
 
     # Get data to filter
-    filename = "./data/robot_data_68_0_06_02_26_17_12_19.pkl"
+    filename = "./data/simple_c_c.pkl"
     ekf_data = data_handling.get_file_data_for_kf(filename)
-
-    # Instantiate PF with no initial guess
-    x_0 = [ekf_data[0][3][0] + 0.5, ekf_data[0][3][1], ekf_data[0][3][5]]
-    Sigma_0 = parameters.I3
-    encoder_counts_0 = ekf_data[0][2].encoder_counts
-    extended_kalman_filter = ExtendedKalmanFilter(x_0, Sigma_0, encoder_counts_0)
-
-    # Create plotting tool for ekf
-    kalman_filter_plot = KalmanFilterPlot()
-
-    # Loop over sim data
-    for t in range(1, len(ekf_data)):
-        row = ekf_data[t]
-        delta_t = ekf_data[t][0] - ekf_data[t - 1][0]  # time step size
-        u_t = np.array([row[2].encoder_counts, row[2].steering])  # robot_sensor_signal
-        z_t = np.array([row[3][0], row[3][1], row[3][5]])  # camera_sensor_signal
-
-        # Run the EKF for a time step
-        extended_kalman_filter.update(u_t, z_t, delta_t)
-        kalman_filter_plot.update(
-            extended_kalman_filter.state_mean,
-            extended_kalman_filter.state_covariance[0:2, 0:2],
+    use_corrector = True#"0_0" not in filename
+    use_random_initial_state = False
+    # (
+    #     "r_r" in filename
+    # )  # use random initial state for the trial with large estimation error to show EKF convergence
+    N_random_test = 10
+    state_traj = []
+    state_traj_camera = []
+    covariance = []
+    if use_random_initial_state:
+        print(
+            "Using random initial state for EKF to show convergence from a bad initial guess."
         )
+        random_x_0 = np.random.uniform(-1.0, 1.0, size=N_random_test)
+        random_y_0 = np.random.uniform(-1.0, 1.0, size=N_random_test)
+        random_theta_0 = np.random.uniform(-math.pi, math.pi, size=N_random_test)
+        # Instantiate PF with no initial guess
+        for i in range(N_random_test):
+            x_0 = [
+                ekf_data[0][3][0] + random_x_0[i],
+                ekf_data[0][3][1] + random_y_0[i],
+                ekf_data[0][3][5] + random_theta_0[i],
+            ]
+            state_traj_, state_traj_camera_, covariance_ = run_test(
+                x_0, ekf_data, use_corrector
+            )
+            state_traj.append(state_traj_)
+            state_traj_camera.append(state_traj_camera_)
+            covariance.append(covariance_)
+    else:
+        x_0 = [
+            ekf_data[0][3][0],
+            ekf_data[0][3][1],
+            ekf_data[0][3][5],
+        ]  # use first camera measurement as initial state guess
+        state_traj, state_traj_camera, covariance = run_test(
+            x_0, ekf_data, use_corrector
+        )
+    # if "r_r" in filename:
+    #     x_0 = np.zeros(3)  # [x, y, theta]
+    plot_traj(state_traj, state_traj_camera, covariance)
 
 
 ####### MAIN #######

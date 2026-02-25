@@ -94,13 +94,11 @@ class MyMotionModel:
         est_vel = distance / delta_t / 0.42 * 100
         w = rotational_velocity_w(steering_angle_command, est_vel)
         if self.gen_noise or self.return_noise_scale:
-            w_std_err = (
-                math.sqrt(
-                    max(
-                        0,
-                        variance_rotational_velocity_w(steering_angle_command, est_vel),
-                    )
-                ),
+            w_std_err = math.sqrt(
+                max(
+                    0,
+                    variance_rotational_velocity_w(steering_angle_command, est_vel),
+                )
             )
 
         if self.gen_noise:
@@ -115,9 +113,8 @@ class MyMotionModel:
         if self.return_noise_scale:
             x_noise_scale = np.array(
                 [
-                    dist_std_err * math.cos(self.state[2]),
-                    dist_std_err * math.sin(self.state[2]),
-                    w_std_err / 180 * math.pi * delta_t,
+                    dist_std_err,
+                    w_std_err / 180 * math.pi * 30,
                 ]
             )
             return self.state, x_noise_scale
