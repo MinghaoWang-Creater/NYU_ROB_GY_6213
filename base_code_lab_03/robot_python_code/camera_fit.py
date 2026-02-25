@@ -8,8 +8,6 @@ from scipy.optimize import least_squares
 import json
 from scipy.spatial.transform import Rotation as R
 
-tvec_scaling_factor = 0.095 / 0.068
-
 
 def load_data():
     data_path = Path("points_data.json")
@@ -23,6 +21,11 @@ def parse_data(data):
     camera_readings = []
     for entry in data:
         measured_points.append(entry[0])
+        measure = np.array(entry[0], dtype=np.float64) * 100 / 300  # Convert ft to m
+        measure[2] = entry[0][2] / 180.0 * np.pi  # Convert degrees to radians
+        measured_points[-1] = np.array(
+            [measure[0], measure[1], 0, 0, 0, measure[2]], dtype=np.float64
+        )
         camera_readings.append(entry[1:])
     return measured_points, camera_readings
 
@@ -42,80 +45,133 @@ measured_points, camera_readings = parse_data(data)
 measured_points_repeated = []
 camera_readings_repeated = []
 
-# Rotation matrix to rotate tag by 180 degrees around Y axis
-R_cam_tag_offset = cv2.Rodrigues(np.array([0.0, np.pi, 0.0], dtype=float))[0]
-print("R_robot_tag offset:\n", R_cam_tag_offset)
-
+# fit the linear relationship between the measured points and camera readings
 for i in range(len(measured_points)):
-    for reading in camera_readings[i]:
-        measured = measured_points[i]
+    for cam_read in camera_readings[i]:
+        measured_points_repeated.append(measured_points[i])
+        camera_readings_repeated.append(cam_read)
+measured_points_repeated = np.array(measured_points_repeated, dtype=np.float64)
+camera_readings_repeated = np.array(camera_readings_repeated, dtype=np.float64)
 
-        # Convert measured points from cm/deg to meters/rad
-        measured_points_repeated.append(
-            [
-                measured[0] * 0.01,
-                measured[1] * 0.01,
-                0.0,
-                0.0,
-                0.0,
-                measured[2] * math.pi / 180.0,
-            ]
-        )
 
-        # Extract and scale tvec immediately
-        tvec_orig = np.array(reading[:3], dtype=float) * tvec_scaling_factor
+# Fit a linear model to the data using scipy
+# Now mapping camera reading -> measured point (Ground Truth)
+# params define T_cam_to_world
+def residuals(params, measured_points, camera_readings):
+    tvec = params[:3]
+    rvec = params[3:]
+    T_cam_to_world = transformation_matrix(tvec, rvec)
+    
+    residuals_list = []
+    
+    # Pre-compute rotation matrix for speed
+    R_cam_to_world = T_cam_to_world[:3, :3]
+    
+    for i in range(len(measured_points)):
+        # Camera Reading (Source)
+        # Position
+        p_cam = np.array([camera_readings[i][0], camera_readings[i][1], camera_readings[i][2], 1.0])
+        # Rotation Vector -> Matrix
+        cam_rvec = camera_readings[i][3:6]
+        R_cam, _ = cv2.Rodrigues(cam_rvec)
+        
+        # Transform Position to World
+        p_est_homog = T_cam_to_world @ p_cam
+        p_est = p_est_homog[:3]
+        
+        # Transform Orientation to World: R_world_est = R_cam_to_world * R_cam
+        R_est = R_cam_to_world @ R_cam
+        # Convert back to Rodrigues for residual calculation
+        rvec_est, _ = cv2.Rodrigues(R_est)
+        rvec_est = rvec_est.flatten()
+        
+        # Measured Point (Target / Ground Truth)
+        p_gt = measured_points[i][:3]  # x, y, z (usually z=0 in measurement setup)
+        # measured_points layout described in previous block: [x, y, 0, 0, 0, theta]
+        # The rotation part in measured_points is just [0, 0, theta]. 
+        # Ideally we convert that Euler/Vector to Rotation Matrix or compare vectors directly if aligned.
+        # Here we compare the resulting rotation vectors.
+        # Note: measured_points[i][3:] is [0, 0, theta]. Let's assume this is a rotation vector format.
+        rvec_gt = measured_points[i][3:6]
+        
+        # Calculate residuals
+        res_t = p_est - p_gt
+        res_r = rvec_est - rvec_gt
+        
+        residuals_list.extend(res_t)
+        residuals_list.extend(res_r)
+        
+    return residuals_list
 
-        # Apply 180-degree rotation to rvec
-        rvec_orig = np.array(reading[3:], dtype=float)
-        # R_original, _ = cv2.Rodrigues(rvec_orig)
-        # R_new = R_original# @ R_cam_tag_offset
-        # rvec_new, _ = cv2.Rodrigues(R_new)
+# Initial guess for optimization
+initial_guess = np.zeros(6) 
+# Perform optimization
+result = least_squares(
+    residuals, initial_guess, args=(measured_points_repeated, camera_readings_repeated)
+)
 
-        camera_readings_repeated.append(
-            np.concatenate([tvec_orig, rvec_orig.flatten()])
-        )
-measured_points_repeated = np.array(measured_points_repeated)
-camera_readings_repeated = np.array(camera_readings_repeated)
-np.set_printoptions(precision=4, suppress=True)
+# Extract optimized parameters
+optimized_tvec = result.x[:3]
+optimized_rvec = result.x[3:]
+print("Optimized Camera->World Translation (tvec):", optimized_tvec)
+print("Optimized Camera->World Rotation (rvec):", optimized_rvec)
 
-# Static offsets
-t_robot_tag = np.array([0.05, -0.05, 0.12], dtype=float)
-T_robot_tag = np.eye(4)
-T_robot_tag[:3, 3] = t_robot_tag
-T_robot_tag[:3, :3] = R_cam_tag_offset
-print("-------------------------------------------------------")
+# Check the fit
+T_opt = transformation_matrix(optimized_tvec, optimized_rvec)
+R_opt = T_opt[:3, :3]
+
+est_world_points = []
+est_world_rvecs = []
 
 for i in range(len(camera_readings_repeated)):
-    tvec = camera_readings_repeated[i][:3]
-    rvec = camera_readings_repeated[i][3:]
-    T_cam_tag = transformation_matrix(tvec, rvec)
+    # Transform position
+    p_cam = np.array([
+        camera_readings_repeated[i][0], 
+        camera_readings_repeated[i][1], 
+        camera_readings_repeated[i][2], 
+        1.0
+    ])
+    p_est = (T_opt @ p_cam)[:3]
+    est_world_points.append(p_est)
+    
+    # Transform rotation
+    cam_rvec = camera_readings_repeated[i][3:6]
+    R_cam, _ = cv2.Rodrigues(cam_rvec)
+    R_est = R_opt @ R_cam
+    r_est_vec, _ = cv2.Rodrigues(R_est)
+    est_world_rvecs.append(r_est_vec.flatten())
 
-    tvec_m = measured_points_repeated[i][:3]
-    rvec_m = measured_points_repeated[i][3:]
-    T_world_robot = transformation_matrix(tvec_m, rvec_m)
-    print(
-        f"Measured Point {i}: {tvec_m} with Yaw {rvec_m[2] * 180.0 / math.pi:.2f} deg"
-    )
+est_world_points = np.array(est_world_points)
+est_world_rvecs = np.array(est_world_rvecs)
 
-    # Compute T_cam_robot
-    # T_cam_robot = T_cam_tag @ np.linalg.inv(T_robot_tag)
-    T_world_tag = T_world_robot @ T_robot_tag
-    T_tag_cam = np.linalg.inv(T_cam_tag)
-    t_vec_tag_cam = T_tag_cam[:3, 3]
-    r_vec_tag_cam, _ = cv2.Rodrigues(T_tag_cam[:3, :3])
-    euler_tag_cam = R.from_matrix(T_tag_cam[:3, :3]).as_euler('zyx', degrees=True)
-    print("t_vec_tag_cam (m):", t_vec_tag_cam)
-    print("r_vec_tag_cam (rvec):", r_vec_tag_cam.flatten())
-    print("euler_tag_cam (deg):", euler_tag_cam)
-    T_world_cam = T_world_tag @ np.linalg.inv(T_cam_tag)
+gt_points = measured_points_repeated[:, :3]
+gt_rvecs = measured_points_repeated[:, 3:6]
 
-    print(f"Camera Reading {i}:")
-    t_vec_world_cam = T_world_cam[:3, 3]
-    r_vec_world_cam, _ = cv2.Rodrigues(T_world_cam[:3, :3])
-    euler_world_cam = R.from_matrix(T_world_cam[:3, :3]).as_euler('zyx', degrees=True)
-    print("Estimated Camera Position (m):", t_vec_world_cam)
-    print("Estimated Camera Orientation (rvec):", r_vec_world_cam.flatten())
-    print("Estimated Camera Orientation (euler deg):", euler_world_cam)
-    # print("T_world_robot:\n", T_world_robot)
-    # print("T_world_cam:\n", T_world_cam)
-    print("-" * 30)
+# Calculate errors (Estimated - Ground Truth)
+pos_errors = est_world_points - gt_points
+rot_errors = est_world_rvecs - gt_rvecs
+
+# Compute Std Dev for EKF noise covariance (R matrix)
+# We assume the error is zero-mean for std calculation, or just use RMSE if bias exists.
+# Standard Deviation of the error represents the sensor noise mapped to state space.
+
+std_x = np.std(pos_errors[:, 0])
+std_y = np.std(pos_errors[:, 1])
+std_z = np.std(pos_errors[:, 2])
+
+# For rotation (specifically Yaw/Theta about Z)
+std_yaw = np.std(rot_errors[:, 2])
+
+print("-" * 30)
+print("Observation Noise Statistics (for EKF):")
+print(f"Std Dev X: {std_x:.6f} m")
+print(f"Std Dev Y: {std_y:.6f} m")
+print(f"Std Dev Yaw: {std_yaw:.6f} rad")
+print("-" * 30)
+
+# MSE for general reference
+mse_translation = np.mean(np.sum(pos_errors**2, axis=1))
+mse_rotation = np.mean(np.sum(rot_errors**2, axis=1))
+
+print("Mean Squared Error (Translation):", mse_translation)
+print("Mean Squared Error (Rotation):", mse_rotation)
