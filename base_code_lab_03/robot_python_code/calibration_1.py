@@ -12,7 +12,7 @@ def main():
     
     # Open camera
     print("Opening camera...")
-    cap = cv.VideoCapture(0)
+    cap = cv.VideoCapture(1)
     
     if not cap.isOpened():
         print("Cannot open camera. Trying other indexes...")

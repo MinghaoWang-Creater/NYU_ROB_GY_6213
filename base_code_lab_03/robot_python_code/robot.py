@@ -52,7 +52,8 @@ class Robot:
     def control_loop(self, cmd_speed = 0, cmd_steering_angle = 0, logging_switch_on = False):
         # Get camera signal
         self.camera_sensor_signal = self.camera_sensor.get_signal(self.camera_sensor_signal)
-        print("Camera signal: ", int(100*self.camera_sensor_signal[0]), int(100*self.camera_sensor_signal[1]), int(100*self.camera_sensor_signal[2]))
+        # print("Camera signal: ", int(100*self.camera_sensor_signal[0]), int(100*self.camera_sensor_signal[1]), int(100*self.camera_sensor_signal[2]))
+        print('cameral_signal', self.camera_sensor_signal)
         
         # Receive msg
         if self.msg_sender != None:

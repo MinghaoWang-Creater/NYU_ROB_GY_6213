@@ -21,7 +21,7 @@ def create_udp_communication(arduinoIP, localIP, arduinoPort, localPort, bufferS
         return udp, True
     except:
         print("Failed to create udp communication!")
-        return _, False
+        return None, False
         
         
 # Class to hold the UPD over wifi connection setup
@@ -198,7 +198,18 @@ class CameraSensor:
     # Constructor
     def __init__(self, camera_id):
         self.camera_id = camera_id
-        self.cap = cv2.VideoCapture(camera_id)
+        self.cap = cv2.VideoCapture(camera_id, cv2.CAP_DSHOW)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0) 
+
+        # 设置极短的曝光
+        # 这是一个相对值，建议从 -8 开始往下调（-9, -10...），直到画面变暗
+        self.cap.set(cv2.CAP_PROP_EXPOSURE, -7) 
+
+        # 因为缩短曝光会导致画面变暗，必须调大增益 (Gain) 来补光
+        # 增益会带来噪点，但噪点对 ArUco 的影响远小于模糊
+        self.cap.set(cv2.CAP_PROP_GAIN, 1000)
         self.aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
         self.parameters = aruco.DetectorParameters()
         self.detector = aruco.ArucoDetector(self.aruco_dict, self.parameters)
@@ -219,12 +230,21 @@ class CameraSensor:
             return False, []
         
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        print(gray.shape)
         corners, ids, rejectedImgPoints = self.detector.detectMarkers(gray)
         if ids is not None:
             # Estimate pose for each detected marker
             for i in range(len(ids)):
-                rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corners[i], parameters.marker_length, parameters.camera_matrix, parameters.dist_coeffs)
-                pose_estimate = [tvec[0][0][0], tvec[0][0][1], tvec[0][0][2], rvec[0][0][0], rvec[0][0][1], rvec[0][0][2]]
+                success, rvec, tvec = cv2.solvePnP(parameters.aruco_obj_points, 
+                                        corners[i].reshape(4, 2), 
+                                        parameters.camera_matrix, 
+                                        parameters.dist_coeffs, 
+                                        flags=cv2.SOLVEPNP_IPPE_SQUARE  # Optimized for flat, square markers
+                                    )
+                # rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corners[i], parameters.marker_length, parameters.camera_matrix, parameters.dist_coeffs)
+                # pose_estimate = [tvec[0][0][0], tvec[0][0][1], tvec[0][0][2], rvec[0][0][0], rvec[0][0][1], rvec[0][0][2]]
+                pose_estimate = [tvec[0][0], tvec[1][0], tvec[2][0], rvec[0][0], rvec[1][0], rvec[2][0]]
+                print("distance", np.linalg.norm(tvec))
             return True, pose_estimate
         
         return False, []
