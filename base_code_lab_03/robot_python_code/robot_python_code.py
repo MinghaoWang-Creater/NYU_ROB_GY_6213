@@ -194,7 +194,38 @@ class MsgReceiver:
 
 # Class to hold a camera sensor data. Not needed for lab 1.
 class CameraSensor:
+    last_rvec = None
+    last_tvec = None
 
+    def get_stable_pose(self, obj_points, image_points, K, D):
+        
+        # 1. 拿到所有解 (IPPE_SQUARE 会返回 2 个解)
+        ret, rvecs, tvecs, errors = cv2.solvePnPGeneric(
+            obj_points, image_points, K, D, flags=cv2.SOLVEPNP_IPPE_SQUARE
+        )
+        
+        if not ret:
+            return None, None
+
+        # 如果只有一解，直接返回
+        if len(rvecs) == 1:
+            best_rvec, best_tvec = rvecs[0], tvecs[0]
+        else:
+            # 2. 策略筛选：如果有两解，选择与上一帧“欧氏距离”最近的解
+            if self.last_rvec is not None:
+                # 比较两个解与上一帧的旋转和平移差异
+                diff0 = np.linalg.norm(rvecs[0] - self.last_rvec) + np.linalg.norm(tvecs[0] - self.last_tvec)
+                diff1 = np.linalg.norm(rvecs[1] - self.last_rvec) + np.linalg.norm(tvecs[1] - self.last_tvec)
+                
+                idx = 0 if diff0 < diff1 else 1
+                best_rvec, best_tvec = rvecs[idx], tvecs[idx]
+            else:
+                # 第一帧：选择 Z 轴（深度）更合理的，或者误差更小的
+                # 在桌面上，通常二维码是正对着相机的，我们可以选旋转角度较小的那个
+                best_rvec, best_tvec = rvecs[0], tvecs[0]
+
+        self.last_rvec, self.last_tvec = best_rvec, best_tvec
+        return best_rvec, best_tvec
     # Constructor
     def __init__(self, camera_id):
         self.camera_id = camera_id
