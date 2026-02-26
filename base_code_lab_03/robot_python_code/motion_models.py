@@ -81,8 +81,8 @@ class MyMotionModel:
         if self.step_with_noise:
             self.gen_noise = True
         if self.gen_noise or self.return_noise_scale:
-            dist_std_err = math.sqrt(
-                variance_distance_travelled_s(encoder_counts - self.last_encoder_count)
+            dist_std_err = math.sqrt(max(0, 
+                variance_distance_travelled_s(encoder_counts - self.last_encoder_count))
             )
         if self.gen_noise:
             dist_noise = random.normalvariate(0, dist_std_err)

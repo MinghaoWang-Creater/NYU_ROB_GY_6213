@@ -2,7 +2,9 @@
 import asyncio
 import cv2
 import math
+import matplotlib
 from matplotlib import pyplot as plt
+matplotlib.use('Agg')
 from matplotlib.patches import Ellipse
 import matplotlib
 from nicegui import ui, app, run
@@ -195,8 +197,8 @@ def main():
             plt.plot(x_est, y_est, 'ro')
 
             plt.grid(True)
-            plot_range = 1
-            plt.xlim(-plot_range, plot_range)
+            plot_range = 2
+            plt.xlim(0, 2)
             plt.ylim(-plot_range, plot_range)
 
     # Run an experiment trial from a button push
@@ -264,7 +266,7 @@ def main():
         encoder_count_label.set_text(robot.robot_sensor_signal.encoder_counts)
         #update_lidar_data()
         #show_lidar_plot()
-        # show_localization_plot()
+        show_localization_plot()
         update_video(video_image)
         
     ui.timer(0.1, control_loop)

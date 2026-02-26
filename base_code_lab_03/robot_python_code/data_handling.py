@@ -56,12 +56,16 @@ def get_file_data_for_kf(filename):
     control_signal_list = data_dict['control_signal']
     robot_sensor_signal_list = data_dict['robot_sensor_signal']
     camera_sensor_signal_list = data_dict['camera_sensor_signal']
+    state_mean_list = data_dict['state_mean']
+    covariance_list = data_dict["state_covariance"]
     
     # Pack up what is needed for KF
     t0 = time_list[0]
     ekf_data = []
     for i in range(len(time_list)):
         row = [time_list[i] - t0, control_signal_list[i], robot_sensor_signal_list[i], camera_sensor_signal_list[i]]
+        row.append(state_mean_list[i])
+        row.append(covariance_list[i])
         ekf_data.append(row)
 
     return ekf_data

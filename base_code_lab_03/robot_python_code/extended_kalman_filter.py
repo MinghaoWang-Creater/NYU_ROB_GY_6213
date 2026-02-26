@@ -140,8 +140,8 @@ class ExtendedKalmanFilter:
     def get_Q(self):
         return np.diag(
             [
-                0.0048478566654710465,
-                0.007572909242886893,
+                0.0048478566654710465 * 2,
+                0.007572909242886893 * 2,
                 0.009776259224975919,
             ]
         )
@@ -212,6 +212,7 @@ def plot_traj_single(state, camera, covariance, label, color="r"):
     for i in range(0, len(state), 20):
         lambda_, v = np.linalg.eig(covariance[i])
         lambda_ = np.sqrt(lambda_) * 5
+        print(lambda_)
         xy = (state[i][0], state[i][1])
         angle = np.rad2deg(np.arctan2(*v[:, 0][::-1]))
         ell = Ellipse(
@@ -345,7 +346,25 @@ def offline_efk():
     #     x_0 = np.zeros(3)  # [x, y, theta]
     plot_traj(state_traj, state_traj_camera, covariance)
 
+def plot_traj_only():
+    # Get data to filter
+    filename = "./data/robot_data_40_-15_25_02_26_19_55_04.pkl"
+    # filename = "./data/simple_c_c.pkl"
+    ekf_data = data_handling.get_file_data_for_kf(filename)
+    state_mean = []
+    ground_truth = []
+    covariance = []
+    kalman_plot =  KalmanFilterPlot()
+    for t in range(1, len(ekf_data)):
+        state_mean.append(np.array(ekf_data[t][4]))
+        z_t = estimate_pose_from_camera_measurement(np.array(ekf_data[t][3]))
+        ground_truth.append(z_t)
+        covariance.append(np.array(ekf_data[t][5])[:2,:2])
+        # kalman_plot.update(state_mean[-1], z_t, covariance[-1], realtime=True)
+
+    plot_traj(state_mean, ground_truth, covariance)
 
 ####### MAIN #######
-if True:
-    offline_efk()
+if __name__ == "__main__":
+    # offline_efk()
+    plot_traj_only()
