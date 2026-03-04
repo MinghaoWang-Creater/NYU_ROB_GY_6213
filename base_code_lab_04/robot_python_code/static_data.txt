@@ -1,0 +1,14 @@
+MAP:
+(0, -2)
+(5, -2)
+(5, 2)
+(0, -2)
+
+OBSTACLE:
+(3, 0) #LEFT BOTTOM
+x 25.3cm
+y 20cm
+
+LIDAR TO CAR ORIGIN
+x=17.7cm
+y=18.3cm/2

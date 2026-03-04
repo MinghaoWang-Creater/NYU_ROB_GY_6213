@@ -2,6 +2,9 @@
 import asyncio
 import cv2
 import math
+import matplotlib
+from matplotlib import pyplot as plt
+matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from matplotlib.patches import Ellipse
 import matplotlib

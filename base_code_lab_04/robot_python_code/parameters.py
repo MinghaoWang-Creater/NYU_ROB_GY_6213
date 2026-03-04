@@ -3,8 +3,8 @@ import math
 import numpy as np
 
 # UDP parameters
-localIP = "192.168.0.199" # Put your laptop computer's IP here 199
-arduinoIP = "192.168.0.200" # Put your arduino's IP here 200
+localIP = "192.168.0.200" # Put your laptop computer's IP here 199
+arduinoIP = "192.168.0.199" # Put your arduino's IP here 200
 localPort = 4010
 arduinoPort = 4010
 bufferSize = 1024
@@ -27,7 +27,7 @@ filename_start = './data/robot_data'
 data_name_list = ['time', 'control_signal', 'robot_sensor_signal', 'camera_sensor_signal', 'state_mean', 'state_covariance']
 
 # Experiment trial parameters
-trial_time = 10000 # milliseconds
+trial_time = 2000 # milliseconds
 extra_trial_log_time = 2000 # milliseconds
 
 # KF parameters

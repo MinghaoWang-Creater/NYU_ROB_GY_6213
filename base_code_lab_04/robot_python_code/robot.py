@@ -67,7 +67,7 @@ class Robot:
         # Send msg
         if self.msg_receiver != None:
             self.msg_sender.send_control_signal(control_signal)
-            
+        self.robot_sensor_signal.print()
         # Log the data
         self.data_logger.log(logging_switch_on, time.perf_counter(), control_signal, self.robot_sensor_signal, self.particle_filter.particle_set.mean_state, self.particle_filter.particle_set)
 
