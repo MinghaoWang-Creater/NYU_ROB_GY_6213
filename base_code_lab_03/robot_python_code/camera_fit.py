@@ -7,26 +7,59 @@ import cv2
 from scipy.optimize import least_squares
 import json
 from scipy.spatial.transform import Rotation as R
+import robot_python_code
 
+
+def get_file_data_for_pf(filename):
+    data_loader = robot_python_code.DataLoader(filename)
+    data_dict = data_loader.load()
+
+    # The dictionary should have keys ['time', 'control_signal', 'robot_sensor_signal', 'camera_sensor_signal']
+    time_list = data_dict["time"]
+    control_signal_list = data_dict["control_signal"]
+    robot_sensor_signal_list = data_dict["robot_sensor_signal"]
+    camera_sensor_signal_list = data_dict["camera_sensor_signal"]
+
+    # Pack up what is needed for KF
+    t0 = time_list[0]
+    pf_data = []
+    for i in range(len(time_list)):
+        row = [time_list[i] - t0, control_signal_list[i], robot_sensor_signal_list[i], camera_sensor_signal_list[i]]
+        pf_data.append(row)
+
+    return pf_data
+
+def load_file(filename):
+    data = get_file_data_for_pf(filename)
+    xy = filename.split("/")[-1].split(".")[0]
+    x, y, theta = xy.split("_")
+    x = float(x) * 0.33  # ft to m
+    y = float(y) * 0.33  # ft to m
+    theta = float(theta) / 180.0 * np.pi  # Convert degrees to radians
+    camera_reading = []
+    for row in data:
+        camera_reading.append(row[3])  # camera_sensor_signal is at index 3
+
+    return x, y, theta, camera_reading
 
 def load_data():
-    data_path = Path("points_data.json")
-    with open(data_path, "r") as f:
-        data = json.load(f)
+    folder = 'data/offline'
+    data = []
+    for file in Path(folder).glob('*.pkl'):
+        x, y, theta, camera_reading = load_file(file.as_posix())
+        data.append([(x, y, theta), camera_reading])
     return data
-
 
 def parse_data(data):
     measured_points = []
     camera_readings = []
     for entry in data:
-        measured_points.append(entry[0])
-        measure = np.array(entry[0], dtype=np.float64) * 100 / 300  # Convert ft to m
-        measure[2] = entry[0][2] / 180.0 * np.pi  # Convert degrees to radians
-        measured_points[-1] = np.array(
-            [measure[0], measure[1], 0, 0, 0, measure[2]], dtype=np.float64
+        pose = entry[0]  # (x, y, theta) already in meters and radians from load_file
+        x, y, theta = pose
+        measured_points.append(
+            np.array([x, y, 0, 0, 0, theta], dtype=np.float64)
         )
-        camera_readings.append(entry[1:])
+        camera_readings.append(entry[1])
     return measured_points, camera_readings
 
 
