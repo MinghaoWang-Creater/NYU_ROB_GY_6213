@@ -54,3 +54,7 @@ wall_corner_list = np.array([
 wall_corner_list[-1][2] += 0.067
 wall_corner_list[-1][3] -= 0.171
 lidar_pos = np.array([0.177, -0.183/2, 0.])
+lidar_bias = -0.05257604941405404       # systematic offset (m)
+lidar_std = 0.044223834651579405        # measurement noise std dev (m)
+distance_variance = lidar_std**2        # variance for lidar distance measurement gaussian (m^2)
+lidar_outlier_threshold = 3 * lidar_std # skip ray if |expected - measured| exceeds this

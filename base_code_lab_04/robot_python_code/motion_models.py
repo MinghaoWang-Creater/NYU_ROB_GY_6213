@@ -67,29 +67,26 @@ def rotational_velocity_w(steering_angle_command, speed_command):
 # This class is an example structure for implementing your motion model.
 class MyMotionModel:
     # Constructor, change as you see fit.
-    def __init__(self, initial_state, last_encoder_count):
+    def __init__(self, initial_state, last_encoder_count=0):
         self.state = initial_state
-        self.last_encoder_count = last_encoder_count
         self.step_with_noise = True
         self.gen_noise = False
         self.return_noise_scale = False
 
     # This is the key step of your motion model, which implements x_t = f(x_{t-1}, u_t)
-    def step_update(self, encoder_counts, steering_angle_command, delta_t):
-        # Add student code here
-        distance = distance_travelled_s(encoder_counts - self.last_encoder_count)
+    def step_update(self, delta_encoder_counts, steering_angle_command, delta_t):
+        distance = distance_travelled_s(delta_encoder_counts)
         if self.step_with_noise:
             self.gen_noise = True
         if self.gen_noise or self.return_noise_scale:
-            dist_std_err = math.sqrt(max(0, 
-                variance_distance_travelled_s(encoder_counts - self.last_encoder_count))
+            dist_std_err = math.sqrt(max(0,
+                variance_distance_travelled_s(delta_encoder_counts))
             )
         if self.gen_noise:
-            dist_noise = random.normalvariate(0, dist_std_err)
+            dist_noise = np.random.normal(0, dist_std_err)
         if self.step_with_noise:
             distance += dist_noise
         self.distance_step = distance  # Store the distance step for use in the Jacobian
-        self.last_encoder_count = encoder_counts
         # our tested cmd to actual speed ratio is speed / cmd = 0.42
         est_vel = distance / delta_t / 0.42 * 100
         w = rotational_velocity_w(steering_angle_command, est_vel)
@@ -102,7 +99,7 @@ class MyMotionModel:
             )
 
         if self.gen_noise:
-            w_noise = np.sign(w) * random.normalvariate(0, w_std_err)
+            w_noise = np.sign(w) * np.random.normal(0, w_std_err)
         if self.step_with_noise:
             w += w_noise
         self.w_Rad = w / 180 * math.pi
@@ -127,11 +124,11 @@ class MyMotionModel:
         x_list = [self.state[0]]
         y_list = [self.state[1]]
         theta_list = [self.state[2]]
-        self.last_encoder_count = encoder_count_list[0]
         for i in range(1, len(encoder_count_list)):
             delta_t = time_list[i] - time_list[i - 1]
+            delta_encoder_counts = encoder_count_list[i] - encoder_count_list[i - 1]
             new_state = self.step_update(
-                encoder_count_list[i], steering_angle_list[i], delta_t
+                delta_encoder_counts, steering_angle_list[i], delta_t
             )
             x_list.append(new_state[0])
             y_list.append(new_state[1])
@@ -151,8 +148,9 @@ class MyMotionModel:
         while t < duration:
             # 1000 -> 30cm
             # speed 5cm /s -> 166.67 encoder counts / s
-            encoder_counts += int(166.67 * delta_t)
-            self.step_update(encoder_counts, steering_angle, delta_t)
+            delta_encoder_counts = int(166.67 * delta_t)
+            encoder_counts += delta_encoder_counts
+            self.step_update(delta_encoder_counts, steering_angle, delta_t)
             x_list.append(self.state[0])
             y_list.append(self.state[1])
             theta_list.append(self.state[2])

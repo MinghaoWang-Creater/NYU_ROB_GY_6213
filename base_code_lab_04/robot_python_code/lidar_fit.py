@@ -89,8 +89,8 @@ for key, readings in all_data.items():
 # fit the bias and std deviation of the lidar error
 flatten_error = [item for sublist in list(lidar_error.values()) for item in sublist]
 # print("Lidar error: ", lidar_error.values())
-bias = np.mean(np.abs(flatten_error))
-std_dev = np.std(np.abs(flatten_error))
+bias = np.mean(flatten_error)
+std_dev = np.std(flatten_error)
 
 print("Lidar bias: ", bias)
 print("Lidar std deviation: ", std_dev)
