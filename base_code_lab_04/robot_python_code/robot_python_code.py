@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import socket
 from time import strftime
-
+import select
 # Local libraries
 import parameters
 
@@ -38,11 +38,44 @@ class UDPCommunication:
         
     # Receive a message from the robot
     def receive_msg(self):
-        bytesAddressPair = self.UDPServerSocket.recvfrom(self.bufferSize)
-        message = bytesAddressPair[0]
-        address = bytesAddressPair[1]
-        clientMsg = "{}".format(message.decode())
-        clientIP = "{}".format(address)
+        # bytesAddressPair = self.UDPServerSocket.recvfrom(self.bufferSize)
+        # message = bytesAddressPair[0]
+        # address = bytesAddressPair[1]
+        # clientMsg = "{}".format(message.decode())
+        # clientIP = "{}".format(address)
+        # 1. 阻塞等待，确保至少有一个数据包到达
+        # 这一步是为了兼容你原来的代码结构，防止没有数据时返回 None 导致主程序崩溃
+        select.select([self.UDPServerSocket], [], [])
+
+        latest_message = None
+        latest_address = None
+
+        # 2. 将 Socket 暂时设置为非阻塞模式，准备榨干缓冲区
+        self.UDPServerSocket.setblocking(False)
+
+        while True:
+            try:
+                # 疯狂循环读取，不断用新包覆盖旧包
+                bytesAddressPair = self.UDPServerSocket.recvfrom(self.bufferSize)
+                latest_message = bytesAddressPair[0]
+                latest_address = bytesAddressPair[1]
+            except BlockingIOError:
+                # 当缓冲区被完全掏空时，会触发 BlockingIOError，此时跳出循环
+                break
+            except socket.error as e:
+                # 兼容 Windows 系统的异常处理
+                break
+
+        # 3. 恢复 Socket 的阻塞模式，保持环境不变
+        self.UDPServerSocket.setblocking(True)
+
+        # 4. 此时 latest_message 里装的就是绝对没有延迟的最新一帧数据！
+        if latest_message is not None:
+            clientMsg = "{}".format(latest_message.decode())
+            # clientIP = "{}".format(latest_address) # 你原代码里有这行但没 return，这里注释保留
+            return clientMsg
+        else:
+            return ""
         
         return clientMsg
        
@@ -243,10 +276,11 @@ class RobotSensorSignal:
         self.encoder_counts = int(unpacked_msg[0])
         self.steering = int(unpacked_msg[1])
         self.num_lidar_rays = int(unpacked_msg[2])
+        self.ping_req = int(unpacked_msg[3])
         self.angles = []
         self.distances = []
         for i in range(self.num_lidar_rays):
-            index = 3 + i*2
+            index = 4 + i*2
             self.angles.append(unpacked_msg[index])
             self.distances.append(unpacked_msg[index+1])
     
@@ -258,6 +292,7 @@ class RobotSensorSignal:
         print(" num_lidar_rays: ", self.num_lidar_rays)
         print(" angles: ",self.angles)
         print(" distances: ", self.distances)
+        print(" ping_req", self.ping_req)
     
     # Convert the sensor signal to a list of ints and floats.
     def to_list(self):

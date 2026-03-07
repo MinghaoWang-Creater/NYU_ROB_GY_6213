@@ -49,6 +49,7 @@ int encoder_count;
 struct ControlSignal {
   int speed = 0;
   int steering_angle = 0;
+  int ping_ack = 0;        // 新增：接收来自电脑的回应标记 (0 或 1)
 };
 ControlSignal last_control_signal;
 
@@ -57,6 +58,7 @@ ControlSignal last_control_signal;
 struct SensorSignal {
   int encoder_count = 0;
   int steering_angle = 0;
+  int ping_req = 0;        // 新增：发给电脑的测试请求标记 (0 或 1)
   int num_lidar_rays = 0;
   String lidar_scan_data = "";
 };
@@ -123,10 +125,21 @@ void setup()
   last_time_rx = millis();
   last_time_tx = millis();
 }
- 
+unsigned long ping_send_time = 0; 
+bool is_ping_waiting = false;     // 是否正在等待电脑的回应
 // Main loop to be run sequentially 
 void loop() 
 {
+  if (Serial.available() > 0) {
+    char incomingByte = Serial.read();
+    // 如果你在串口输入了 'p' 或 'P'，并且当前没有在等上一次的结果
+    if ((incomingByte == 'p' || incomingByte == 'P') && !is_ping_waiting) {
+      last_sensor_signal.ping_req = 1; // 竖起请求发送的 Flag
+      ping_send_time = millis();       // 记录此时的时间戳
+      is_ping_waiting = true;
+      Serial.println(">>> 收到串口测试指令 'p'！已打包 Ping 标记，等待下一次 UDP 发送...");
+    }
+  }
   // Receive control signal messages
   ControlSignal control_signal = receive_control_signals(last_control_signal);
   last_control_signal = control_signal;
@@ -137,6 +150,7 @@ void loop()
   // Send sensor data in messages to laptop
   SensorSignal sensor_signal = get_sensor_signal(control_signal.steering_angle);
   send_sensor_signal(sensor_signal);
+
 }
 
 // After sending lidar data to the laptop, reset the count and message.
@@ -180,10 +194,24 @@ ControlSignal receive_control_signals(ControlSignal last_control_signal) {
         packetBuffer[len] = 0;
       }
       control_signal = unpack_control_signal(packetBuffer);
-      Serial.print("Received cmd: ");
-      Serial.print(control_signal.speed);
-      Serial.print(", ");
-      Serial.println(control_signal.steering_angle);
+      // Serial.print("Received cmd: ");
+      // Serial.print(control_signal.speed);
+      // Serial.print(", ");
+      // Serial.println(control_signal.steering_angle);
+      if (is_ping_waiting && control_signal.ping_ack == 1) {
+        unsigned long rtt = millis() - ping_send_time;
+        Serial.println("=====================================");
+        Serial.print(">>> 收到上位机回传！往返延迟 (RTT): ");
+        Serial.print(rtt);
+        Serial.println(" ms");
+        Serial.print(">>> 预估单向通信延迟: ");
+        Serial.print(rtt / 2);
+        Serial.println(" ms");
+        Serial.println("=====================================");
+        last_sensor_signal.ping_req = 0;
+        
+        is_ping_waiting = false; // 重置状态，允许在串口进行下一次输入 'p' 测试
+      }
       last_time_rx = new_time_rx;
     }
   }
@@ -212,7 +240,7 @@ SensorSignal get_sensor_signal(float steering_angle) {
 
 // Get new lidar measurements
 void lidar_update() {
-  if (IS_OK(lidar.waitPoint())) {
+  if (IS_OK(lidar.waitPoint(200))) {
     float distance = lidar.getCurrentPoint().distance;
     if (distance > 100 && current_num_lidar_rays < NumLidarRaysPerMsg) {
       int angle = int(lidar.getCurrentPoint().angle);
@@ -221,6 +249,7 @@ void lidar_update() {
     }
   } else {
     analogWrite(RPLidarMotorPin, 255); //stop the rplidar motor
+    Serial.println("break");
     
     // try to detect RPLIDAR... 
     rplidar_response_device_info_t info;
@@ -257,11 +286,12 @@ void send_sensor_signal(SensorSignal sensor_signal)
   if (new_time_tx - last_time_tx > SendDeltaTimeInMs) {
     String msg = String(sensor_signal.encoder_count) + ",";
     msg = msg + String(sensor_signal.steering_angle) + ",";
-    msg = msg + String(current_num_lidar_rays);
+    msg = msg + String(current_num_lidar_rays) + ",";
+    msg = msg + String(sensor_signal.ping_req);
     msg = msg + current_lidar_scan_data;
     reset_lidar_message();
-    //Serial.print("Sending msg: ");
-    //Serial.println(msg);
+    // Serial.print("Sending msg: ");
+    // Serial.println(msg);
 
     Udp.beginPacket(remoteIP, remotePort);
     int   array_length  = msg.length()+1;
@@ -299,6 +329,10 @@ ControlSignal unpack_control_signal(char* packed_control_signal_as_char) {
   // Unpack the desired steering angle
   token = strtok(NULL, ",");
   control_signal.steering_angle = atof(token);
+
+  // Unpack the ping ack
+  token = strtok(NULL, ",");
+  control_signal.ping_ack = atof(token);
 
   return control_signal;
 }

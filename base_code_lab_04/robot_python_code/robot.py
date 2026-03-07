@@ -26,7 +26,7 @@ class Robot:
         self.msg_receiver = None
         self.camera_sensor = robot_python_code.CameraSensor(parameters.camera_id)
         self.data_logger = robot_python_code.DataLogger(parameters.filename_start, parameters.data_name_list)
-        self.robot_sensor_signal = robot_python_code.RobotSensorSignal([0, 0, 0])
+        self.robot_sensor_signal = robot_python_code.RobotSensorSignal([0, 0, 0, 0])
         self.camera_sensor_signal = [0,0,0,0,0,0]
         map = particle_filter.Map(parameters.wall_corner_list)
         self.particle_filter = particle_filter.ParticleFilter(parameters.num_particles, map, particle_filter.State(0,0,0), particle_filter.State(1,1,1), True, 0)
@@ -53,16 +53,17 @@ class Robot:
     def control_loop(self, cmd_speed = 0, cmd_steering_angle = 0, logging_switch_on = False):
         # Get camera signal
         #self.camera_sensor_signal = self.camera_sensor.get_signal(self.camera_sensor_signal)
-        
+        ping_ack = 0
         # Receive msg
         if self.msg_sender != None:
             self.robot_sensor_signal = self.msg_receiver.receive_robot_sensor_signal(self.robot_sensor_signal)
+            ping_ack = self.robot_sensor_signal.ping_req
         
         # Update the state estimates
         self.update_state_estimate()
 
         # Update control signals
-        control_signal = [cmd_speed, cmd_steering_angle]
+        control_signal = [cmd_speed, cmd_steering_angle, ping_ack]
                 
         # Send msg
         if self.msg_receiver != None:
