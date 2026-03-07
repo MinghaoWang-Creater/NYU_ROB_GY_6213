@@ -36,13 +36,13 @@ covariance_plot_scale = 100
 
 # PF parameters, modify the map and num particles as you see fit.
 num_particles = 100
-wall_corner_list = [
-    [0, 0, 2.74, 0], 
-    [0, 0, 0, 3.78], 
-    [0, 3.78, 1.92, 3.78],
-    [1.03, 1.61, 1.03, 2.19],
-    [1.03, 2.19, 1.41, 2.19],
-    [1.92, 3.78, 1.92, 3.32],
-    [1.92, 3.32, 2.74, 3.32],
-    [2.74, 3.32, 2.74, 0]
-    ]
+wall_corner_list = np.array([
+    [0, -2, 0, 2], # back wall
+    [5, -2, 5, 2], # front wall
+    [0, -2, 5, -2], # right wall
+    [0, 2, 5, 2], # left wall
+    [3, 0, 3, 0] # obstacle wall
+    ]) * 0.33 # ft to m
+wall_corner_list[-1][2] += 0.2
+wall_corner_list[-1][3] -= 0.253
+lidar_pos = np.array([0.177, -0.183/2, 0.])

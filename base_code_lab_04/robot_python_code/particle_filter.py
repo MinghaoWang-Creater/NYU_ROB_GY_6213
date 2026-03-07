@@ -91,22 +91,60 @@ class Map:
 
     # Function to calculate the distance between any state and its closest wall, accounting for directon of the state.
     def closest_distance_to_walls(self, state):
-        closest_distance = 999999999999
-        for wall in self.wall_list:
-            closest_distance = self.get_distance_to_wall(state, wall, closest_distance)
+        closest_distance = np.inf
+        dist = [self.get_distance_to_wall(state, wall) for wall in self.wall_list]
+        closest_distance = min(dist)
         
-        return closest_distance
+        return closest_distance, np.argmin(dist)
         
     # Function to get distance to a wall from a state, in the direction of the state's theta angle.
     # Or return the distance currently believed to be the closest if its closer.
-    def get_distance_to_wall(self, state, wall, closest_distance):
-        ################## Add student code here ###################
-        # Use geometry to calculate the distance from the robot to the wall, for a particular direction state.theta
-        # If the direction isn't pointed towards the wall, return closest_distance.
-        # Suggestion: Thoroughly test your code with unit tests before using
-        
-        return 0
+    def get_distance_to_wall(self, state, wall):
+        # 1. Ray: Origin (x, y) and Direction (dx, dy)
+        x, y, theta = state.x, state.y, state.theta
+        dx = math.cos(theta)
+        dy = math.sin(theta)
 
+        # 2. Get Wall Boundaries (handles corners in any order)
+        x_min, x_max = min(wall.corner1.x, wall.corner2.x), max(wall.corner1.x, wall.corner2.x)
+        y_min, y_max = min(wall.corner1.y, wall.corner2.y), max(wall.corner1.y, wall.corner2.y)
+
+        # 3. If robot is already inside the brick, distance is 0
+        # Add a tiny epsilon (1e-9) to handle floating point edges
+        if (x_min - 1e-9 <= x <= x_max + 1e-9) and (y_min - 1e-9 <= y <= y_max + 1e-9):
+            return 0.0
+
+        hits = []
+
+        # 4. Check Vertical Boundaries (X = constant)
+        if abs(dx) > 1e-9:
+            for wx in [x_min, x_max]:
+                t = (wx - x) / dx
+                if t > 0:
+                    hit_y = y + t * dy
+                    if y_min <= hit_y <= y_max:
+                        hits.append(t)
+
+        # 5. Check Horizontal Boundaries (Y = constant)
+        if abs(dy) > 1e-9:
+            for wy in [y_min, y_max]:
+                t = (wy - y) / dy
+                if t > 0:
+                    hit_x = x + t * dx
+                    if x_min <= hit_x <= x_max:
+                        hits.append(t)
+        # print(f"State at ({x:.2f}, {y:.2f}), angle {theta:.2f} rad, wall {self.wall_list.index(wall)}, distance to wall: {min(hits) if hits else float('inf'):.2f} m")
+        # 3. Return the closest hit
+        return min(hits) if hits else float('inf')
+
+    def simulate_lidar(self, state, angle):
+        '''
+        simulate a lidar reading from a state and angle
+        '''
+        lidar_state = State(state.x + math.cos(state.theta) * parameters.lidar_pos[0] - math.sin(state.theta) * parameters.lidar_pos[1],
+                            state.y + math.sin(state.theta) * parameters.lidar_pos[0] + math.cos(state.theta) * parameters.lidar_pos[1],
+                            state.theta + angle)
+        return self.closest_distance_to_walls(lidar_state)
 
 # Class to hold a particle
 class Particle:
