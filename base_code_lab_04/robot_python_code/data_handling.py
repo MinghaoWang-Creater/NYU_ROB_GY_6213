@@ -47,27 +47,6 @@ def get_file_data(filename):
 
 
 # Open a file and return data in a form ready to plot
-def get_file_data_for_kf(filename):
-    data_loader = robot_python_code.DataLoader(filename)
-    data_dict = data_loader.load()
-
-    # The dictionary should have keys ['time', 'control_signal', 'robot_sensor_signal', 'camera_sensor_signal']
-    time_list = data_dict['time']
-    control_signal_list = data_dict['control_signal']
-    robot_sensor_signal_list = data_dict['robot_sensor_signal']
-    camera_sensor_signal_list = data_dict['camera_sensor_signal']
-    
-    # Pack up what is needed for KF
-    t0 = time_list[0]
-    ekf_data = []
-    for i in range(len(time_list)):
-        row = [time_list[i] - t0, control_signal_list[i], robot_sensor_signal_list[i], camera_sensor_signal_list[i]]
-        ekf_data.append(row)
-
-    return ekf_data
-
-
-# Open a file and return data in a form ready to plot
 def get_file_data_for_pf(filename):
     data_loader = robot_python_code.DataLoader(filename)
     data_dict = data_loader.load()
@@ -76,12 +55,19 @@ def get_file_data_for_pf(filename):
     time_list = data_dict['time']
     control_signal_list = data_dict['control_signal']
     robot_sensor_signal_list = data_dict['robot_sensor_signal']
+    state_mean_list = data_dict['state_mean']
+    state_cov_list = data_dict['state_covariance']
+    camera_sensor_signal_list = data_dict['camera_sensor_signal']
+
     
     # Pack up what is needed for KF
     t0 = time_list[0]
     pf_data = []
     for i in range(len(time_list)):
         row = [time_list[i] - t0, control_signal_list[i], robot_sensor_signal_list[i]]
+        row.append(state_mean_list[i])
+        row.append(state_cov_list[i])
+        row.append(camera_sensor_signal_list[i])
         pf_data.append(row)
 
     return pf_data

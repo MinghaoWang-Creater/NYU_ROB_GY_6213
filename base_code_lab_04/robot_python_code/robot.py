@@ -58,7 +58,9 @@ class Robot:
         if self.msg_sender != None:
             self.robot_sensor_signal = self.msg_receiver.receive_robot_sensor_signal(self.robot_sensor_signal)
             ping_ack = self.robot_sensor_signal.ping_req
-        
+        self.camera_sensor_signal = self.camera_sensor.get_signal(self.camera_sensor_signal)
+        print('camera_signal', self.camera_sensor_signal)
+
         # Update the state estimates
         self.update_state_estimate()
 
@@ -70,5 +72,8 @@ class Robot:
             self.msg_sender.send_control_signal(control_signal)
         self.robot_sensor_signal.print()
         # Log the data
-        self.data_logger.log(logging_switch_on, time.perf_counter(), control_signal, self.robot_sensor_signal, self.particle_filter.particle_set.mean_state, self.particle_filter.particle_set)
-
+        self.data_logger.log(logging_switch_on, time.perf_counter(), 
+                             control_signal, self.robot_sensor_signal, 
+                             self.particle_filter.particle_set.mean_state, 
+                             self.particle_filter.particle_set,
+                             self.camera_sensor_signal)

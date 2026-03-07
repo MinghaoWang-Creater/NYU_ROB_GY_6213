@@ -9,6 +9,27 @@ import random
 import parameters
 import data_handling
 
+from scipy.spatial.transform import Rotation as R
+
+def estimate_pose_from_camera_measurement(camera_measurement):
+    T_optimal = np.array(
+        [
+            [ 0.99796608,  0.01102755, -0.06278616,  0.0094643 ],
+            [-0.01221634,  0.99975271, -0.01858174, -0.04666413],
+            [ 0.06256572,  0.01931097,  0.99785401,  0.0046057 ],
+            [ 0.        ,  0.        ,  0.        ,  1.        ]
+        ]
+    )
+    cam_meas_homog = np.array(
+        [camera_measurement[0], camera_measurement[1], camera_measurement[2], 1],
+        dtype=np.float64,
+    )
+    rot = T_optimal[:3, :3] @ R.from_rotvec(camera_measurement[3:]).as_matrix()
+    theta = R.from_matrix(rot).as_euler("zyx", degrees=False)[0]
+    world_meas_homog = T_optimal @ cam_meas_homog
+    return np.array([world_meas_homog[0], world_meas_homog[1], theta], dtype=np.float64)
+
+
 # Helper function to make sure all angles are between -pi and pi
 def angle_wrap(angle):
     while angle > math.pi:

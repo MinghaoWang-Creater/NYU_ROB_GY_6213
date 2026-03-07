@@ -12,7 +12,7 @@ from nicegui import ui, app, run
 import numpy as np
 import time
 from fastapi import Response
-from time import time, perf_counter
+from time import time
 
 # Local libraries
 from robot import Robot
@@ -249,10 +249,7 @@ def main():
     async def control_loop():
         update_connection_to_robot()
         cmd_speed, cmd_steering_angle = update_commands()
-        # start = perf_counter()
         robot.control_loop(cmd_speed, cmd_steering_angle, logging_switch.value)
-        # end = perf_counter()
-        # print("control timing:", (end - start) * 1000, "ms")
         encoder_count_label.set_text(robot.robot_sensor_signal.encoder_counts)
         update_lidar_data()
         show_lidar_plot()
