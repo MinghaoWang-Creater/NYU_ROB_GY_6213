@@ -10,12 +10,20 @@ arduinoPort = 4010
 bufferSize = 1024
 
 # Camera parameters
-camera_id = 0
-marker_length = 0.071
-camera_matrix = np.array([[1.41089024e+03, 0.00000000e+00 ,5.34757040e+02],
- [0.00000000e+00 ,1.40977771e+03, 4.63300611e+02],
- [0.00000000e+00 ,0.00000000e+00 ,1.00000000e+00]], dtype=np.float32)
-dist_coeffs = np.array([-0.32511173, -0.09273864 ,-0.00295959 , 0.00111094 , 0.2446519 ], dtype=np.float32)
+camera_id = 1
+marker_length = 0.095 #
+aruco_s = marker_length / 2
+aruco_obj_points = np.array([
+    [-aruco_s,  aruco_s, 0],  # Top-left
+    [ aruco_s,  aruco_s, 0],  # Top-right
+    [ aruco_s, -aruco_s, 0],  # Bottom-right
+    [-aruco_s, -aruco_s, 0]   # Bottom-left
+], dtype=np.float32)
+camera_matrix = np.array([[1043.8076991308567, 0.0, 567.6461917597342], 
+                          [0.0, 1045.5137931512506, 339.3373122636459], 
+                          [0.0, 0.0, 1.0]], dtype=np.float32)
+dist_coeffs = np.array([-0.3611480623680854, -0.005147783780657834, 0.0006081964431444159, 0.0022315832746950598, 0.2948753728273205], dtype=np.float32)
+
 
 # Robot parameters
 num_robot_sensors = 2 # encoder, steering
@@ -37,12 +45,12 @@ covariance_plot_scale = 100
 # PF parameters, modify the map and num particles as you see fit.
 num_particles = 100
 wall_corner_list = np.array([
-    [0, -2, 0, 2], # back wall
-    [5, -2, 5, 2], # front wall
-    [0, -2, 5, -2], # right wall
-    [0, 2, 5, 2], # left wall
+    [-1, -2, -1, 2], # back wall
+    [4, -2, 4, 2], # front wall
+    [-1, -2, 4, -2], # right wall
+    [-1, 2, 4, 2], # left wall
     [3, 0, 3, 0] # obstacle wall
     ]) * 0.33 # ft to m
-wall_corner_list[-1][2] += 0.2
-wall_corner_list[-1][3] -= 0.253
+wall_corner_list[-1][2] += 0.067
+wall_corner_list[-1][3] -= 0.171
 lidar_pos = np.array([0.177, -0.183/2, 0.])

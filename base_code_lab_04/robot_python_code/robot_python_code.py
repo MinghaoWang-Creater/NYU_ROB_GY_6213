@@ -229,7 +229,20 @@ class MsgReceiver:
 
 # Class to hold a camera sensor data. Not needed for lab 1.
 class CameraSensor:
+    last_rvec = None
+    last_tvec = None
 
+    def get_stable_pose(self, obj_points, image_points, K, D):
+        
+        # 1. 拿到所有解 (IPPE_SQUARE 会返回 2 个解)
+        ret, rvecs, tvecs, errors = cv2.solvePnPGeneric(
+            obj_points, image_points, K, D, flags=cv2.SOLVEPNP_IPPE_SQUARE
+        )
+        
+        if not ret:
+            return None, None
+        
+        return rvecs, tvecs
     # Constructor
     def __init__(self, camera_id):
         self.camera_id = camera_id
