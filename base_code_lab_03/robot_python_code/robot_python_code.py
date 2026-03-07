@@ -250,9 +250,31 @@ class CameraSensor:
         self.parameters = aruco.DetectorParameters()
         self.detector = aruco.ArucoDetector(self.aruco_dict, self.parameters)
 
-        
-        self.t_cam_Wm = np.array([-0.09672431764972296, 0.6759073797311419, 1.985569405581368])
-        self.r_cam_Wm = np.array([0.06030869386511298, -2.652779206688187, 1.6107345099735122])
+        rvecs0 = (np.array([[ 2.158],
+                [ 2.16 ],
+                [-0.129]]), np.array([[-1.963],
+                [-1.928],
+                [ 0.062]]))
+        tvecs0 = (np.array([[ 0.247],
+                [-0.101],
+                [ 1.596]]), np.array([[ 0.246],
+                [-0.101],
+                [ 1.596]]))
+
+        # rvecs0 = (np.array([[-2.133],
+        #         [-2.18 ],
+        #         [-0.255]]), np.array([[ 2.073],
+        #         [ 2.095],
+        #         [-0.167]]))
+        # tvecs0 = (np.array([[-0.092],
+        #         [ 0.03 ],
+        #         [ 1.594]]), np.array([[-0.092],
+        #         [ 0.03 ],
+        #         [ 1.594]]))
+        self.t_cam_Wm = tvecs0[0]
+        self.r_cam_Wm = rvecs0[0]
+        # self.t_cam_Wm = np.array([-0.09672431764972296, 0.6759073797311419, 1.985569405581368])
+        # self.r_cam_Wm = np.array([0.06030869386511298, -2.652779206688187, 1.6107345099735122])
         self.t_robot_marker = 0#np.array([6.7, -8.4, 12.9]) / 100
         self.r_robot_marker = R.from_euler('zyx', np.array([90., 0., 0.0]), degrees=True).as_rotvec().tolist()
         
@@ -297,6 +319,9 @@ class CameraSensor:
                                         corners[i].reshape(4, 2), 
                                         parameters.camera_matrix, 
                                         parameters.dist_coeffs)
+                print("rvecs",rvecs)
+                print("tvecs",tvecs)
+
                 t_robot_list = []
                 r_robot_list = []
                 verbose = False
