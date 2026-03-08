@@ -41,9 +41,9 @@ extra_trial_log_time = 2000 # milliseconds
 # KF parameters
 I3 = np.array([[1, 0, 0],[0, 1, 0], [0, 0, 1]])
 covariance_plot_scale = 100
-
+cov_plot_scale = 30
 # PF parameters, modify the map and num particles as you see fit.
-num_particles = 100
+num_particles = 200
 wall_corner_list = np.array([
     [-1, -2, -1, 2], # back wall
     [4, -2, 4, 2], # front wall
@@ -56,5 +56,8 @@ wall_corner_list[-1][3] -= 0.171
 lidar_pos = np.array([0.177, -0.183/2, 0.])
 lidar_bias = -0.05257604941405404       # systematic offset (m)
 lidar_std = 0.044223834651579405        # measurement noise std dev (m)
-distance_variance = lidar_std**2        # variance for lidar distance measurement gaussian (m^2)
-lidar_outlier_threshold = 3 * lidar_std # skip ray if |expected - measured| exceeds this
+distance_variance = (lidar_std)**2        # variance for lidar distance measurement gaussian (m^2)
+# lidar_outlier_threshold = 3.0 * lidar_std # skip ray if |expected - measured| exceeds this
+resample_noise_x = 0.2 # std dev of noise added to particle x position during resampling (m)
+resample_noise_y = 0.2 # std dev of noise added to particle y position during resampling (m)
+resample_noise_theta = 100 * math.pi / 180 # std dev of noise added to particle heading during resampling (radians)

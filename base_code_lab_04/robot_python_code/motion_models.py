@@ -79,8 +79,9 @@ class MyMotionModel:
         if self.step_with_noise:
             self.gen_noise = True
         if self.gen_noise or self.return_noise_scale:
-            dist_std_err = math.sqrt(max(0,
-                variance_distance_travelled_s(delta_encoder_counts))
+            dist_std_err = (
+                math.sqrt(max(0, variance_distance_travelled_s(delta_encoder_counts)))
+                * 1
             )
         if self.gen_noise:
             dist_noise = np.random.normal(0, dist_std_err)
@@ -91,11 +92,13 @@ class MyMotionModel:
         est_vel = distance / delta_t / 0.42 * 100
         w = rotational_velocity_w(steering_angle_command, est_vel)
         if self.gen_noise or self.return_noise_scale:
-            w_std_err = math.sqrt(
-                max(
-                    0,
-                    variance_rotational_velocity_w(steering_angle_command, est_vel),
-                )
+            w_std_err = (
+                math.sqrt(
+                    max(
+                        0,
+                        variance_rotational_velocity_w(steering_angle_command, est_vel),
+                    )
+                ) * 20
             )
 
         if self.gen_noise:
@@ -111,7 +114,7 @@ class MyMotionModel:
             x_noise_scale = np.array(
                 [
                     dist_std_err,
-                    w_std_err / 180 * math.pi * 30,
+                    w_std_err / 180 * math.pi,
                 ]
             )
             return self.state, x_noise_scale
