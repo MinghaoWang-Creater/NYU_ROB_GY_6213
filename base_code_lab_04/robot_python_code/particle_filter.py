@@ -424,14 +424,14 @@ class ParticleFilter:
         for particle in self.particle_set.particle_list:
             particle.calculate_weight(measurement_signal, self.map)
         max_weight = max(p.weight for p in self.particle_set.particle_list)
-        sorted_particle = sorted(self.particle_set.particle_list, key=lambda p: p.weight, reverse=True)
-        print("sorted", [p.weight for p in sorted_particle[:10]])  # Print top 5 particles by weight
-        for p in sorted_particle[:10]:  # Print top 5 particles by weight
-            print(f"Particle weight: {p.weight:.3e}")
-            print(f"Particle angle count: {p.angle_count}")
-            print(f"Particle state: x={p.state.x:.3f}, y={p.state.y:.3f}, theta={p.state.theta:.3f}")
+        # sorted_particle = sorted(self.particle_set.particle_list, key=lambda p: p.weight, reverse=True)
+        # print("sorted", [p.weight for p in sorted_particle[:10]])  # Print top 5 particles by weight
+        # for p in sorted_particle[:10]:  # Print top 5 particles by weight
+        #     print(f"Particle weight: {p.weight:.3e}")
+        #     print(f"Particle angle count: {p.angle_count}")
+        #     print(f"Particle state: x={p.state.x:.3f}, y={p.state.y:.3f}, theta={p.state.theta:.3f}")
         self.particle_set.resample(max_weight)
-        print("normalized weights after resampling:", [p.weight for p in self.particle_set.particle_list[:5]])  # Print weights of top 5 particles after resampling
+        # print("normalized weights after resampling:", [p.weight for p in self.particle_set.particle_list[:5]])  # Print weights of top 5 particles after resampling
 
     # Output to terminal the mean state.
     def print_state_estimate(self):

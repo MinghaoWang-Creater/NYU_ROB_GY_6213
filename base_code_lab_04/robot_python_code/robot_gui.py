@@ -13,6 +13,7 @@ import numpy as np
 import time
 from fastapi import Response
 from time import time
+from time import perf_counter
 
 # Local libraries
 from robot import Robot
@@ -21,7 +22,7 @@ import parameters
 
 # Global variables
 logging = False
-stream_video = False
+stream_video = True
 
 
 # Frame converter for the video stream, from OpenCV to a JPEG image
@@ -35,7 +36,7 @@ def convert(frame: np.ndarray) -> bytes:
     
 # Create the connection with a real camera.
 def connect_with_camera():
-    video_capture = cv2.VideoCapture(1)
+    video_capture = cv2.VideoCapture(1, cv2.CAP_DSHOW)
     return video_capture
     
 def update_video(video_image):
@@ -70,18 +71,19 @@ def main():
     
     # Set up the video stream, not needed for lab 1
     if stream_video:
-        video_capture = cv2.VideoCapture(parameters.camera_id)
+        video_capture = cv2.VideoCapture(parameters.camera_id, cv2.CAP_DSHOW)
+        # video_capture.set(cv2.CAP_PROP_EXPOSURE, -6)
     
     # Enable frame grabs from the video stream.
     @app.get('/video/frame')
     async def grab_video_frame() -> Response:
         if not video_capture.isOpened():
-            return placeholder
+            return None
         # The `video_capture.read` call is a blocking function.
         # So we run it in a separate thread (default executor) to avoid blocking the event loop.
         _, frame = await run.io_bound(video_capture.read)
         if frame is None:
-            return placeholder
+            return None
         # `convert` is a CPU-intensive function, so we run it in a separate process to avoid blocking the event loop and GIL.
         jpeg = await run.cpu_bound(convert, frame)
         return Response(content=jpeg, media_type='image/jpeg')
@@ -181,11 +183,36 @@ def main():
             plt.style.use('dark_background')
             plt.tick_params(axis='x', colors='lightgray')
             plt.tick_params(axis='y', colors='lightgray')
+            
+            sigma = 3
+            xs = np.array([p.state.x for p in robot.particle_filter.particle_set.particle_list])
+            ys = np.array([p.state.y for p in robot.particle_filter.particle_set.particle_list])
+            x_est = robot.particle_filter.state_estimate.x
+            y_est = robot.particle_filter.state_estimate.y
+            theta_est = robot.particle_filter.state_estimate.theta
+            covar_matrix = np.cov(np.stack([xs, ys]))
+            lambda_, v = np.linalg.eig(covar_matrix)
+            lambda_ = np.sqrt(lambda_)
+            ell = Ellipse(xy=(x_est, y_est), alpha=0.5, facecolor='red',width=lambda_[0], height=lambda_[1], angle=np.rad2deg(np.arctan2(*v[:,0][::-1])))
+            ax = fig.gca()
+            ax.add_artist(ell)
+
+            # from particle_filter import robot_pose_to_lidar_pose
+            # lidarpose = robot_pose_to_lidar_pose([x_est, y_est, theta_est])
+            # for i in range(num_angles):
+            #     distance = lidar_distance_list[i]
+            #     angle = lidar_angle_res
+            #     cos_ang = lidar_cos_angle_list[i]
+            #     sin_ang = lidar_sin_angle_list[i]
+            #     x = [lidarpose[0] + distance * cos_ang, max_lidar_range * cos_ang]
+            #     y = [lidarpose[1] + distance * sin_ang, max_lidar_range * sin_ang]
+            #     plt.plot(x, y, 'b')
+
             plt.plot(x_est, y_est, 'ro')
 
             plt.grid(True)
-            plot_range = 1
-            plt.xlim(-plot_range, plot_range)
+            plot_range = 2
+            plt.xlim(-2, 2)
             plt.ylim(-plot_range, plot_range)
 
     # Run an experiment trial from a button push
@@ -247,14 +274,17 @@ def main():
 
     # Update slider values, plots, etc. and run robot control loop
     async def control_loop():
+        start = perf_counter()
         update_connection_to_robot()
         cmd_speed, cmd_steering_angle = update_commands()
         robot.control_loop(cmd_speed, cmd_steering_angle, logging_switch.value)
         encoder_count_label.set_text(robot.robot_sensor_signal.encoder_counts)
         update_lidar_data()
-        show_lidar_plot()
-        #show_localization_plot()
-        #update_video(video_image)
+        # show_lidar_plot()
+        show_localization_plot()
+        update_video(video_image)
+        end = perf_counter()
+        print("loop time", (end - start) * 1000, "ms")
         
     ui.timer(0.1, control_loop)
 

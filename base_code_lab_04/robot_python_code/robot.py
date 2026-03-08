@@ -7,7 +7,7 @@ import cv2.aruco as aruco
 import numpy as np
 import matplotlib.pyplot as plt
 import socket
-from time import strftime
+from time import strftime, perf_counter
 
 # Local libraries
 import parameters
@@ -29,7 +29,7 @@ class Robot:
         self.robot_sensor_signal = robot_python_code.RobotSensorSignal([0, 0, 0, 0])
         self.camera_sensor_signal = [0,0,0,0,0,0]
         map = particle_filter.Map(parameters.wall_corner_list)
-        self.particle_filter = particle_filter.ParticleFilter(parameters.num_particles, map, particle_filter.State(0,0,0), particle_filter.State(1,1,1), True, 0)
+        self.particle_filter = particle_filter.ParticleFilter(parameters.num_particles, map, particle_filter.State(0,0,0), particle_filter.State(0.1,0.1,0.1), True, 0)
         
     # Create udp senders and receiver instances with the udp communication
     def setup_udp_connection(self, udp_communication):
@@ -47,7 +47,10 @@ class Robot:
         u_t = np.array([self.robot_sensor_signal.encoder_counts, self.robot_sensor_signal.steering]) # robot_sensor_signal
         z_t = self.robot_sensor_signal
         delta_t = 0.1
+        start = perf_counter()
         self.particle_filter.update(u_t, z_t, delta_t)
+        end = perf_counter()
+        print("filter timing", (end - start) * 1000, "ms")
 
     # One iteration of the control loop to be called repeatedly
     def control_loop(self, cmd_speed = 0, cmd_steering_angle = 0, logging_switch_on = False):
@@ -70,7 +73,7 @@ class Robot:
         # Send msg
         if self.msg_receiver != None:
             self.msg_sender.send_control_signal(control_signal)
-        self.robot_sensor_signal.print()
+        # self.robot_sensor_signal.print()
         # Log the data
         self.data_logger.log(logging_switch_on, time.perf_counter(), 
                              control_signal, self.robot_sensor_signal, 

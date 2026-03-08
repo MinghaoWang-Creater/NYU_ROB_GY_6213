@@ -23,7 +23,7 @@ def create_udp_communication(arduinoIP, localIP, arduinoPort, localPort, bufferS
         return udp, True
     except:
         print("Failed to create udp communication!")
-        return _, False
+        return None, False
         
         
 # Class to hold the UPD over wifi connection setup
@@ -331,8 +331,6 @@ class CameraSensor:
                                         corners[i].reshape(4, 2), 
                                         parameters.camera_matrix, 
                                         parameters.dist_coeffs)
-                print("rvecs",rvecs)
-                print("tvecs",tvecs)
 
                 t_robot_list = []
                 r_robot_list = []
