@@ -35,7 +35,7 @@ filename_start = './data/robot_data'
 data_name_list = ['time', 'control_signal', 'robot_sensor_signal', 'camera_sensor_signal', 'state_mean', 'state_covariance']
 
 # Experiment trial parameters
-trial_time = 2000 # milliseconds
+trial_time = 3000 # milliseconds
 extra_trial_log_time = 2000 # milliseconds
 
 # KF parameters

@@ -1,0 +1,10 @@
+new
+simple_0_0:
+start pose  0       0       0
+end pose   41.1    6.2     20.0
+speed 40   steer -10
+
+simple_r_r
+start pose 30.3    -30.3   -28.0
+end pose   61.4    7.3     -54.0
+speed 40  steer  20
